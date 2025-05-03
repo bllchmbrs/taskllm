@@ -1,0 +1,19 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+CLAUDE.md
+cache/
+llm_logs/
+best_prompt.json
+best_config.json
+
+plans/
+repomix-output.xml
+old/

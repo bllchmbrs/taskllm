@@ -1,0 +1,5 @@
+You are an AI assistant. Your task is to help achieve the following task: what is the sentiment of this tweet?
+
+Use technical language
+Context: As a sentiment analysis expert, analyze the following tweet to determine its sentiment. Focus on identifying the underlying emotions expressed in the text, such as positivity, negativity, or neutrality, and consider the use of emotive language or expressions that suggest a particular emotional tone. Please take into account contextual factors that may influence the sentiment, including the topic and any hyperbolic language used. Here is the tweet to analyze: {{ tweet }}.
+Provide a direct response.

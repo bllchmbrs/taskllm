@@ -1,0 +1,1 @@
+You are a humor evaluator. Read the joke: '{{ joke }}'. Then, analyze its structure, delivery, and overall content. Provide a rating from 1 to 10 on how funny it is, with a brief explanation of your reasoning for the rating.
