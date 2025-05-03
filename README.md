@@ -32,25 +32,9 @@ pip install -e .
 
 ## Quick Start
 
-Here's a simple example of how to use TaskLLM to instrument a function. This shouldn't be used in production, but is helpful for prototyping and testing.
+Please see one of the examples for a quick start. It will show you how to train a prompt for a specific task.
 
-```python
-from taskllm.instrument import instrument_task
-
-# For synchronous functions
-@instrument_task("add_numbers")
-def add_numbers(a: int, b: int) -> int:
-    return a + b
-
-# For asynchronous functions
-@instrument_task("add_numbers_async", enable_quality_labeling=True)
-async def add_numbers_async(a: int, b: int) -> int:
-    return a + b
-
-# Call the functions
-result = add_numbers(1, 2)  # Will log inputs and outputs
-async_result = await add_numbers_async(3, 4)  # Will log and prompt for quality assessment
-```
+Video to come out shortly!
 
 ## Core Components
 
