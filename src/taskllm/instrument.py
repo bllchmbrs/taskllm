@@ -108,11 +108,16 @@ def instrument_task(
                     ).lower()
                     is_good = quality == "yes"
 
+                # Prepare data for JSON serialization
+                serialized_outputs = outputs
+                if hasattr(outputs, "model_dump"):
+                    serialized_outputs = outputs.model_dump()
+
                 log_data = {
                     "task_name": name,
                     "timestamp": timestamp,
                     "inputs": inputs,
-                    "outputs": outputs or is_good,
+                    "outputs": serialized_outputs,
                     "quality": is_good,
                 }
 
@@ -154,11 +159,16 @@ def instrument_task(
                     )
                     is_good = quality.lower() == "yes"
 
+                # Prepare data for JSON serialization
+                serialized_outputs = outputs
+                if hasattr(outputs, "model_dump"):
+                    serialized_outputs = outputs.model_dump()
+
                 log_data = {
                     "task_name": name,
                     "timestamp": timestamp,
                     "inputs": inputs,
-                    "outputs": outputs or is_good,
+                    "outputs": serialized_outputs,
                     "quality": is_good,
                 }
 
