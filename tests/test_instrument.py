@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from src.taskllm.instrument import instrument_task
+from taskllm.instrument import instrument_task
 
 
 class TestInstrumentTask(unittest.IsolatedAsyncioTestCase):
@@ -85,7 +85,17 @@ class TestInstrumentTask(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(log_data["task_name"], task_name)
         self.assertEqual(log_data["inputs"], {"val": True})
         self.assertEqual(log_data["outputs"], False)
-        self.assertTrue(log_data["quality"])
+
+        # The instrument module accepts multiple forms of "yes" (case-insensitive)
+        # Expect either "True", true, or 1 depending on how it's saved
+        quality_value = log_data["quality"]
+        self.assertTrue(
+            quality_value == True or
+            quality_value == "True" or
+            quality_value == "true" or
+            quality_value == 1
+        )
+
         mock_input.assert_called_once()
 
     @patch("builtins.input", return_value="no")

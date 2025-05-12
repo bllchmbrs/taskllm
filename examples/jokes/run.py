@@ -30,11 +30,13 @@ def funny_scoring_function(row: Row[IsJokeFunny], output: IsJokeFunny | None) ->
         return -10
     if not row.expected_output:
         return 0
-    if row.expected_output.is_funny == output.is_funny:
+    if row.expected_output.is_funny == output.is_funny:  # true positive
         return 2
-    elif row.expected_output.is_funny is True and output.is_funny is False:
+    elif (
+        row.expected_output.is_funny is True and output.is_funny is False
+    ):  # false negative
         return -1
-    else:
+    else:  # false positive
         return -2
 
 

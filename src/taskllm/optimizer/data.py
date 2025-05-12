@@ -55,9 +55,16 @@ class Row(BaseModel, Generic[T]):
         return self.input_variables
 
     def to_dict(self):
+        outputs = None
+        if self.expected_output is not None:
+            if hasattr(self.expected_output, "model_dump"):
+                outputs = self.expected_output.model_dump()
+            else:
+                outputs = self.expected_output
+
         return {
             "inputs": self.input_variables,
-            "outputs": self.expected_output,
+            "outputs": outputs,
             "task_name": self.task_name,
             "timestamp": self.timestamp,
             "quality": None,  # This was in the original jsonl

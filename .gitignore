@@ -17,3 +17,4 @@ best_config.json
 plans/
 repomix-output.xml
 old/
+**/.claude/settings.local.json
