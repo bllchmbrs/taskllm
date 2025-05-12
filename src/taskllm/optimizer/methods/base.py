@@ -1,11 +1,23 @@
 import asyncio
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Coroutine, Generic, List, Literal, Type, TypeVar
+from typing import (
+    Any,
+    Callable,
+    Coroutine,
+    Dict,
+    Generic,
+    List,
+    Literal,
+    Optional,
+    Tuple,
+    Type,
+    TypeVar,
+)
 
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from ...ai import DEFAULT_LLM_CONFIG
+from ...ai import DEFAULT_LLM_CONFIG, LLMConfig
 from ...utils import get_cache
 from ..data import DataSet, Row
 from ..prompt.meta import MetaPrompt, generate_prompts
@@ -69,11 +81,15 @@ class PromptWithType(BaseModel, Generic[OUTPUT_TYPE]):
             else:
                 unlabelled += 1
 
+        total_score = sum(scores)
+
+        # Log with model info
         logger.info(
+            f"Model {self.meta_prompt.config.model} with prompt achieved score: {total_score:.4f}, "
             f"Correct: {correct}, Incorrect: {incorrect}, Unlabelled: {unlabelled} out of {len(rows)}"
         )
 
-        return sum(scores)
+        return total_score
 
 
 class BaseOptimizer(BaseModel, Generic[OUTPUT_TYPE], ABC):
@@ -85,6 +101,12 @@ class BaseOptimizer(BaseModel, Generic[OUTPUT_TYPE], ABC):
     prompt_history: List[PromptWithType] = []
     row_scoring_function: Callable[[Row, OUTPUT_TYPE | None], float]
     print_iteration_summary: bool = True
+    # Multi-model testing parameters
+    models_to_test: List[str] = Field(
+        default_factory=lambda: [DEFAULT_LLM_CONFIG.model]
+    )
+    model_exploration_rate: float = 0.3  # How often to try different models
+    prioritize_best_model: bool = True  # Whether to find best model per prompt
 
     async def select_best_prompt(self, rows: List[Row]) -> MetaPrompt | None:
         """Get the best prompt from the performance history"""
@@ -105,6 +127,66 @@ class BaseOptimizer(BaseModel, Generic[OUTPUT_TYPE], ABC):
     async def log_prompt_to_history(self, performance: PromptWithType) -> None:
         """Add performance data for a prompt template"""
         self.prompt_history.append(performance)
+
+    async def select_best_prompt_by_model(
+        self, rows: List[Row]
+    ) -> Dict[str, Optional[MetaPrompt]]:
+        """Find the best prompt for each model."""
+        if not self.prompt_history:
+            return {}
+
+        # Group prompts by model
+        model_prompts: Dict[str, List[PromptWithType]] = {}
+        for pwt in self.prompt_history:
+            model = pwt.meta_prompt.config.model
+            if model not in model_prompts:
+                model_prompts[model] = []
+            model_prompts[model].append(pwt)
+
+        # Find best prompt per model
+        best_prompts: Dict[str, Optional[MetaPrompt]] = {}
+        for model, prompts in model_prompts.items():
+            if not prompts:
+                best_prompts[model] = None
+                continue
+
+            scores = await asyncio.gather(
+                *[
+                    prompt.calculate_scores(rows, self.row_scoring_function)
+                    for prompt in prompts
+                ]
+            )
+
+            best_idx = scores.index(max(scores)) if scores else 0
+            best_prompts[model] = prompts[best_idx].meta_prompt
+
+        return best_prompts
+
+    async def select_best_model_and_prompt(
+        self, rows: List[Row]
+    ) -> Tuple[str, Optional[MetaPrompt]]:
+        """Find the best model and its best prompt."""
+        model_prompts = await self.select_best_prompt_by_model(rows)
+
+        if not model_prompts:
+            return DEFAULT_LLM_CONFIG.model, None
+
+        # Score each model's best prompt
+        model_scores = {}
+        for model, prompt in model_prompts.items():
+            if prompt is None:
+                continue
+
+            pwt: PromptWithType[OUTPUT_TYPE] = PromptWithType(meta_prompt=prompt)
+            score = await pwt.calculate_scores(rows, self.row_scoring_function)
+            model_scores[model] = (score, prompt)
+
+        if not model_scores:
+            return DEFAULT_LLM_CONFIG.model, None
+
+        # Find best model
+        best_model = max(model_scores.items(), key=lambda x: x[1][0])[0]
+        return best_model, model_scores[best_model][1]
 
     @abstractmethod
     async def select_next_prompts(self, num_variations: int = 3) -> List[MetaPrompt]:
@@ -139,6 +221,7 @@ class Trainer(Generic[OUTPUT_TYPE], ABC):
         num_iterations: int = 5,
         candidates_per_iteration: int = 3,
         print_iteration_summary: bool = True,
+        models: Optional[List[str]] = None,
     ):
         if isinstance(all_rows, List):
             self.dataset = DataSet(rows=all_rows, name="dataset")
@@ -153,6 +236,10 @@ class Trainer(Generic[OUTPUT_TYPE], ABC):
         self.candidates_per_iteration = candidates_per_iteration
         self.optimizer = optimizer
         self.print_iteration_summary = print_iteration_summary
+
+        # If models specified, pass to optimizer
+        if models:
+            self.optimizer.models_to_test = models
 
     async def select_best_prompt(
         self, rows: List[Row] | None = None
@@ -224,6 +311,11 @@ class Trainer(Generic[OUTPUT_TYPE], ABC):
         """Evaluate a prompt on all data"""
         pwt: PromptWithType[OUTPUT_TYPE] = PromptWithType(meta_prompt=prompt)
         return await pwt.calculate_scores(self.dataset.rows, self.scoring_function)
+
+    async def get_best_llm_config(self) -> LLMConfig:
+        """Get the best LLM config from the performance history"""
+        best_prompt = await self.get_best_prompt()
+        return best_prompt.config
 
     async def get_best_prompt(
         self, dev_or_test_dataset: Literal["dev", "test"] = "dev"

@@ -33,7 +33,7 @@ class LLMConfig(BaseModel):
 
 
 DEFAULT_LLM_CONFIG = LLMConfig(
-    model="gpt-4o-mini",
+    model="openai/gpt-4o-mini",
     temperature=0.5,
     max_tokens=1000,
     top_p=1.0,

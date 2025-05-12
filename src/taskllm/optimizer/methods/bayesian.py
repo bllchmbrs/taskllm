@@ -544,6 +544,7 @@ class BayesianTrainer(Trainer[OUTPUT_TYPE]):
         acquisition_function: Literal["ei", "ucb"] = "ei",
         exploration_weight: float = 0.1,
         prompt_mode: PromptMode = PromptMode.ADVANCED,
+        models: Optional[List[str]] = None,
     ):
         """Initialize the BayesianTrainer with appropriate configuration."""
         # Create the optimizer
@@ -565,6 +566,7 @@ class BayesianTrainer(Trainer[OUTPUT_TYPE]):
             scoring_function=scoring_function,
             num_iterations=num_iterations,
             candidates_per_iteration=candidates_per_iteration,
+            models=models,
         )
         self.bayesian_optimizer = cast(BayesianOptimizer, self.optimizer)
         logger.debug("BayesianTrainer initialized", optimizer_type="BayesianOptimizer")
@@ -682,23 +684,41 @@ class BayesianTrainer(Trainer[OUTPUT_TYPE]):
         # Final model update with all data
         await self.bayesian_optimizer.fit_surrogate_model()
 
-        # Select the best prompt based on performance on the test set
-        final_best_prompt = await self.select_best_prompt(self.dataset.test_rows)
+        # --- Model-specific analysis ---
+        logger.info("Analyzing performance by model...")
+        model_best_prompts = await self.optimizer.select_best_prompt_by_model(self.dataset.test_rows)
 
-        if final_best_prompt:
+        for model, prompt in model_best_prompts.items():
+            if prompt:
+                pwt = PromptWithType(meta_prompt=prompt)
+                score = await pwt.calculate_scores(self.dataset.test_rows, self.scoring_function)
+                logger.success(f"Best prompt for model {model} achieved test score: {score:.4f}")
+
+                # Save model-specific best prompts
+                safe_model_name = model.replace('/', '_')
+                with open(f"best_prompt_{safe_model_name}.txt", "w") as f:
+                    f.write(prompt.get_user_message_content())
+            else:
+                logger.warning(f"No valid prompt found for model {model}")
+
+        # --- Overall best model+prompt ---
+        # Find overall best model+prompt combination
+        best_model, best_prompt = await self.optimizer.select_best_model_and_prompt(self.dataset.test_rows)
+
+        if best_prompt:
             # Evaluate on test set
-            final_test_mean = await self.eval_prompt_on_test_set(final_best_prompt)
+            final_test_mean = await self.eval_prompt_on_test_set(best_prompt)
             logger.success(
-                f"Training complete. Final best prompt test score: {final_test_mean:.4f}",
+                f"Training complete. Best overall model is {best_model}. Final test score: {final_test_mean:.4f}",
                 test_score=final_test_mean,
             )
             # Save the best prompt
             logger.info("Saving final best prompt (based on test set).")
             try:
                 with open("best_prompt.txt", "w") as f:
-                    f.write(final_best_prompt.get_user_message_content())
+                    f.write(best_prompt.get_user_message_content())
                 with open("best_config.json", "w") as f:
-                    f.write(final_best_prompt.config.model_dump_json(indent=2))
+                    f.write(best_prompt.config.model_dump_json(indent=2))
                 logger.success("Successfully saved best prompt and config.")
             except Exception as e:
                 logger.error(f"Failed to save best prompt: {e}")

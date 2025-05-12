@@ -1,15 +1,15 @@
 import asyncio
 import random
-from typing import Callable, List, Type
+from typing import Callable, List, Optional, Type
 
 from loguru import logger
 
 from ...ai import DEFAULT_LLM_CONFIG
 from ..data import DataSet, Row
-from ..prompt.meta import MetaPrompt, PromptMode, generate_prompts
+from ..prompt.meta import LLMConfig, MetaPrompt, PromptMode, generate_prompts
 
 # Ensure PromptWithType is imported if needed for type hints, though not directly used in methods here
-from .base import OUTPUT_TYPE, BaseOptimizer, Trainer
+from .base import OUTPUT_TYPE, BaseOptimizer, PromptWithType, Trainer
 
 
 class BanditOptimizer(BaseOptimizer[OUTPUT_TYPE]):
@@ -135,6 +135,39 @@ class BanditOptimizer(BaseOptimizer[OUTPUT_TYPE]):
                     )
                 )
 
+        # If we have multiple models to test, create model variants
+        if len(self.models_to_test) > 1:
+            model_variants = []
+
+            # For some of our best prompts, test with different models
+            for prompt in variations[: max(1, num_variations // 2)]:
+                # Check if we should explore different models based on model_exploration_rate
+                if random.random() < self.model_exploration_rate:
+                    for model in self.models_to_test:
+                        # Skip if it's already using this model
+                        if model == prompt.config.model:
+                            continue
+
+                        # Create a variant with different model
+                        variant = prompt.model_copy(deep=True)
+                        variant.config = LLMConfig(
+                            model=model,
+                            temperature=prompt.config.temperature,
+                            max_tokens=prompt.config.max_tokens,
+                            top_p=prompt.config.top_p,
+                            frequency_penalty=prompt.config.frequency_penalty,
+                            presence_penalty=prompt.config.presence_penalty,
+                        )
+                        model_variants.append(variant)
+
+            # Add model variants, respecting our total variation budget
+            available_slots = num_variations - len(variations)
+            if available_slots > 0 and model_variants:
+                logger.info(
+                    f"Adding {min(available_slots, len(model_variants))} model variations"
+                )
+                variations.extend(model_variants[:available_slots])
+
         logger.success(
             f"Generated {len(variations)} total prompts (best + variations)",
             variation_count=len(variations),
@@ -157,6 +190,7 @@ class BanditTrainer(Trainer[OUTPUT_TYPE]):
         candidates_per_iteration: int = 3,
         exploration_parameter: float = 0.1,  # Pass exploration param to optimizer
         prompt_mode: PromptMode = PromptMode.SIMPLE,  # Default to advanced mode
+        models: Optional[List[str]] = None,  # Add models parameter
     ):
         """Initialize the bandit trainer."""
         optimizer = BanditOptimizer(
@@ -176,6 +210,7 @@ class BanditTrainer(Trainer[OUTPUT_TYPE]):
             scoring_function=scoring_function,
             num_iterations=num_iterations,
             candidates_per_iteration=candidates_per_iteration,
+            models=models,  # Pass models parameter to super constructor
         )
         # No self.best_prompt needed, managed by optimizer state + select_best_prompt
         logger.debug("BanditTrainer initialized", optimizer_type="BanditOptimizer")
@@ -307,25 +342,51 @@ class BanditTrainer(Trainer[OUTPUT_TYPE]):
 
         # --- Step 3: Final Evaluation ---
         logger.info("Phase 3: Final evaluation on test set...")
-        # Select the best prompt based on performance on the *test* set
-        # Note: This selects the best overall from history using test data, not necessarily the last best found during training.
-        final_best_prompt = await self.select_best_prompt(self.dataset.test_rows)
 
-        if final_best_prompt:
+        # --- Model-specific analysis ---
+        logger.info("Analyzing performance by model...")
+        model_best_prompts = await self.optimizer.select_best_prompt_by_model(
+            self.dataset.test_rows
+        )
+
+        for model, prompt in model_best_prompts.items():
+            if prompt:
+                pwt = PromptWithType(meta_prompt=prompt)
+                score = await pwt.calculate_scores(
+                    self.dataset.test_rows, self.scoring_function
+                )
+                logger.success(
+                    f"Best prompt for model {model} achieved test score: {score:.4f}"
+                )
+
+                # Save model-specific best prompts
+                safe_model_name = model.replace("/", "_")
+                with open(f"best_prompt_{safe_model_name}.txt", "w") as f:
+                    f.write(prompt.get_user_message_content())
+            else:
+                logger.warning(f"No valid prompt found for model {model}")
+
+        # --- Overall best model+prompt ---
+        # Find overall best model+prompt combination
+        best_model, best_prompt = await self.optimizer.select_best_model_and_prompt(
+            self.dataset.test_rows
+        )
+
+        if best_prompt:
             # Evaluate on test set using the new helper method
-            final_test_mean = await self.eval_prompt_on_test_set(final_best_prompt)
+            final_test_mean = await self.eval_prompt_on_test_set(best_prompt)
             logger.success(
-                f"Training complete. Final best prompt test score: {final_test_mean:.4f}",
+                f"Training complete. Best overall model is {best_model}. Final test score: {final_test_mean:.4f}",
                 test_score=final_test_mean,
-                # final_prompt_template=final_best_prompt.get_user_message_content()[:100] + "...",
+                # final_prompt_template=best_prompt.get_user_message_content()[:100] + "...",
             )
             # Implement dumping logic here, similar to base Trainer.dump but async-compatible
             logger.info("Dumping final best prompt (based on test set).")
             try:
                 with open("best_prompt.txt", "w") as f:  # Use .txt for clarity
-                    f.write(final_best_prompt.get_user_message_content())
+                    f.write(best_prompt.get_user_message_content())
                 with open("best_config.json", "w") as f:
-                    f.write(final_best_prompt.config.model_dump_json(indent=2))
+                    f.write(best_prompt.config.model_dump_json(indent=2))
                 logger.success("Successfully dumped best prompt and config.")
             except Exception as e:
                 logger.error(f"Failed to dump best prompt: {e}")

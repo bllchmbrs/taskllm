@@ -52,12 +52,18 @@ def main():
         scoring_function=funny_scoring_function,
         num_iterations=2,  # Start with fewer iterations for testing
         candidates_per_iteration=2,  # Start with fewer candidates for testing
+        models=[
+            "anthropic/claude-3-haiku-20240307",
+            "openai/gpt-4.1-nano-2025-04-14",
+            "openai/gpt-4.1-mini-2025-04-14",
+        ],
     )
     asyncio.run(trainer.train())
     best_prompt = asyncio.run(trainer.get_best_prompt())
     best_score = asyncio.run(trainer.eval_prompt_on_all_data(best_prompt))
-
+    best_config = asyncio.run(trainer.get_best_llm_config())
     print(f"Best score: {best_score}")
+    print(f"Best config: {best_config}")
     print(best_prompt.get_user_message_content())
 
 
