@@ -25,7 +25,7 @@ from ..prompt.meta import MetaPrompt, generate_prompts
 OUTPUT_TYPE = TypeVar("OUTPUT_TYPE", bound=BaseModel | bool | str | None)
 
 cache = get_cache("evaluation")
-DEFAULT_SEMAPHORE = asyncio.Semaphore(20)
+DEFAULT_SEMAPHORE = asyncio.Semaphore(10)
 
 
 class PromptWithType(BaseModel, Generic[OUTPUT_TYPE]):
@@ -36,15 +36,25 @@ class PromptWithType(BaseModel, Generic[OUTPUT_TYPE]):
     async def get_output(
         self, row: Row, semaphore: asyncio.Semaphore = DEFAULT_SEMAPHORE
     ) -> OUTPUT_TYPE | None:
+        """Get output for a row using the meta prompt"""
         async with semaphore:
-            logger.trace(f"Getting output for row")
-            return await self.meta_prompt.execute(
-                row.get_variables(), DEFAULT_LLM_CONFIG
+            logger.trace(
+                f"Getting output for row using {self.meta_prompt.config.model}"
             )
+            try:
+                result = await self.meta_prompt.execute(  # type: ignore
+                    row.get_variables(), self.meta_prompt.config
+                )
+                return result
+            except Exception as e:
+                logger.error(f"Error executing prompt: {e}")
+                return None
 
     async def get_outputs(self, rows: List[Row]) -> List[OUTPUT_TYPE | None]:
         """Get the outputs for a list of rows"""
-        logger.debug(f"Getting outputs for {len(rows)} rows")
+        logger.debug(
+            f"Getting outputs for {len(rows)} rows using {self.meta_prompt.config.model}"
+        )
         output_tasks: List[Coroutine[Any, Any, OUTPUT_TYPE | None]] = [
             self.get_output(row, DEFAULT_SEMAPHORE) for row in rows
         ]
@@ -189,7 +199,9 @@ class BaseOptimizer(BaseModel, Generic[OUTPUT_TYPE], ABC):
         return best_model, model_scores[best_model][1]
 
     @abstractmethod
-    async def select_next_prompts(self, num_variations: int = 3) -> List[MetaPrompt]:
+    async def select_next_prompts(
+        self, num_variations: int = 3, rows: List[Row] | None = None
+    ) -> List[MetaPrompt]:
         """Select the next prompts to evaluate"""
         pass
 
@@ -263,32 +275,30 @@ class Trainer(Generic[OUTPUT_TYPE], ABC):
         self, prompt: MetaPrompt, rows: List[Row] | None = None
     ) -> PromptWithType[OUTPUT_TYPE]:
         """Run the optimizer for a given prompt"""
+        if rows is None:
+            rows = self.dataset.training_rows
         logger.info(
             f"Running for prompt {prompt.spec.get_content()[:100]}... against {len(rows)} rows"
         )
-        if rows is None:
-            rows = self.dataset.training_rows
         prompt_with_type: PromptWithType[OUTPUT_TYPE] = PromptWithType(
             meta_prompt=prompt
         )
         _ = await prompt_with_type.get_outputs(rows)
         return prompt_with_type
 
-    def dump(self):
+    def dump(self) -> None:
         """Save the best prompt to disk"""
+        # First get the best prompt to avoid calling select_best_prompt twice
+        best_prompt = asyncio.run(self.select_best_prompt(self.dataset.training_rows))
+        if best_prompt is None:
+            logger.error("Cannot dump best prompt: no best prompt found")
+            return
+
         with open("best_prompt.json", "w") as f:
-            f.write(
-                self.select_best_prompt(
-                    self.dataset.training_rows
-                ).get_user_message_content()
-            )
+            f.write(best_prompt.get_user_message_content())
 
         with open("best_config.json", "w") as f:
-            f.write(
-                self.select_best_prompt(
-                    self.dataset.training_rows
-                ).config.model_dump_json()
-            )
+            f.write(best_prompt.config.model_dump_json())
 
     @abstractmethod
     async def train(self) -> None:

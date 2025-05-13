@@ -6,7 +6,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 from taskllm.optimizer.data import DataSet, Row
-from taskllm.optimizer.methods import BanditTrainer
+from taskllm.optimizer.methods import BanditTrainer, BayesianTrainer
 from taskllm.optimizer.prompt.meta import PromptMode
 
 # logger.remove()  # remove the old handler. Else, the old one will work (and continue printing DEBUG logs) along with the new handler added below'
@@ -57,7 +57,7 @@ def load_file_as_dataset(path: str) -> DataSet:
                     output=rating,
                 )
             )
-    return DataSet(rows=rows[:100], name="starbucks_reviews")
+    return DataSet(rows=rows[:2], name="starbucks_reviews")
 
 
 def main():
@@ -65,19 +65,19 @@ def main():
     dataset = load_file_as_dataset(csv_path)
 
     print("Starting training")
-    trainer = BanditTrainer(
+    trainer = BayesianTrainer(
         all_rows=dataset,
         task_guidance="determine the rating of this review",
         keys=["review", "name", "location", "date"],
         expected_output_type=StarbucksReviewRating,
         scoring_function=sentiment_scoring_function,
-        num_iterations=3,  # Start with fewer iterations for testing
-        candidates_per_iteration=3,  # Start with fewer candidates for testing
+        num_iterations=2,  # Start with fewer iterations for testing
+        candidates_per_iteration=2,  # Start with fewer candidates for testing
         prompt_mode=PromptMode.ADVANCED,
         models=[
             "anthropic/claude-3-haiku-20240307",
             "openai/gpt-4.1-nano-2025-04-14",
-            "openai/gpt-4.1-mini-2025-04-14",
+            # "openai/gpt-4.1-mini-2025-04-14",
         ],
     )
     asyncio.run(trainer.train())

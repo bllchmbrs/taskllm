@@ -2,7 +2,7 @@ import json
 from typing import Any, Dict, Generic, List, TypeVar
 
 from pydantic import BaseModel
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split  # type: ignore
 
 T = TypeVar("T", bound=BaseModel)
 

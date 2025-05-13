@@ -18,3 +18,4 @@ plans/
 repomix-output.xml
 old/
 **/.claude/settings.local.json
+**/.ipynb_checkpoints/

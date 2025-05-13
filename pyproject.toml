@@ -12,7 +12,8 @@ dependencies = [
     "litellm>=1.67.2",
     "loguru>=0.7.3",
     "pydantic>=2.11.3",
-    "pymc>=5.22.0",
+    "pyro-ppl>=1.9.0",
+    "torch>=2.0.0",
     "rich>=13.0",
     "scikit-learn>=1.6.1",
 ]
@@ -20,6 +21,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "black>=25.1.0",
+    "jupyterlab>=4.4.2",
     "mypy>=1.15.0",
     "pytest>=8.3.5",
     "pytest-asyncio>=0.23.5",
@@ -35,5 +37,5 @@ disallow_incomplete_defs = false
 
 # Module overrides
 [[tool.mypy.overrides]]
-module = ["diskcache.*", "sklearn.*", "scipy.*", "pymc.*", "aioconsole.*"]
+module = ["diskcache.*", "sklearn.*", "scipy.*", "pymc.*", "aioconsole.*", "pyro.*", "torch.*"]
 ignore_missing_imports = true

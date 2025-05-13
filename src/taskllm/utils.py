@@ -1,7 +1,7 @@
 import os
 from typing import ParamSpec, TypeVar
 
-import diskcache
+import diskcache  # type: ignore
 
 CACHE_DIR = os.path.expanduser("~/.cache/taskllm")
 

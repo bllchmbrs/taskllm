@@ -4,9 +4,8 @@ from typing import Callable, List, Optional, Type
 
 from loguru import logger
 
-from ...ai import DEFAULT_LLM_CONFIG
 from ..data import DataSet, Row
-from ..prompt.meta import LLMConfig, MetaPrompt, PromptMode, generate_prompts
+from ..prompt.meta import LLMConfig, MetaPrompt, MetaPromptSpecBase, PromptMode, generate_prompts
 
 # Ensure PromptWithType is imported if needed for type hints, though not directly used in methods here
 from .base import OUTPUT_TYPE, BaseOptimizer, PromptWithType, Trainer
@@ -73,7 +72,9 @@ class BanditOptimizer(BaseOptimizer[OUTPUT_TYPE]):
         )
         return best_prompt
 
-    async def select_next_prompts(self, num_variations: int = 3) -> List[MetaPrompt]:
+    async def select_next_prompts(
+        self, num_variations: int = 3, rows: Optional[List[Row]] = None
+    ) -> List[MetaPrompt]:
         """Generate variations of the current best prompt or explore new ones."""
         variations = []
 
@@ -122,16 +123,27 @@ class BanditOptimizer(BaseOptimizer[OUTPUT_TYPE]):
             )
 
         # Execute all variation creation tasks concurrently
-        created_variation_specs = await asyncio.gather(*variation_tasks)
+        created_variation_specs: List[
+            MetaPromptSpecBase | None
+        ] = await asyncio.gather(*variation_tasks)
 
         # Filter out None results (failed variations) and convert specs to MetaPrompt objects
         for spec in created_variation_specs:
             if spec is not None:
+                # Create a config using the model from the spec and default values
+                config = LLMConfig(
+                    model=spec.model,
+                    temperature=0.5,
+                    max_tokens=1000,
+                    top_p=1.0,
+                    frequency_penalty=0.0,
+                    presence_penalty=0.0
+                )
                 variations.append(
                     MetaPrompt(
                         spec=spec,
                         expected_output_type=self.expected_output_type,  # type: ignore[arg-type]
-                        config=DEFAULT_LLM_CONFIG,
+                        config=config,
                     )
                 )
 

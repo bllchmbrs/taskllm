@@ -40,7 +40,7 @@ from .ai import (
 T = TypeVar("T", bound=BaseModel | bool | str)
 
 
-class ModelsEnum(Enum):
+class ModelsEnum(str, Enum):
     CLAUDE_3_HAIKU = "anthropic/claude-3-haiku-20240307"
     GPT_4_1_NANO = "openai/gpt-4.1-nano-2025-04-14"
     GPT_4_1_MINI = "openai/gpt-4.1-mini-2025-04-14"
@@ -366,9 +366,9 @@ class MetaPrompt(BaseModel, Generic[MetaPromptSpecT]):
         return [{"role": "user", "content": prompt}]
 
     async def execute(self, variables: Dict[str, Any], config: LLMConfig) -> T | None:
-        logger.trace(f"Executing prompt")
+        logger.trace("Executing prompt")
         if self.expected_output_type is bool:
-            logger.trace(f"Executing simple prompt")
+            logger.trace("Executing simple prompt")
             res = await simple_llm_call(
                 self.generate_messages(variables),
                 config,
@@ -391,7 +391,7 @@ class MetaPrompt(BaseModel, Generic[MetaPromptSpecT]):
         elif isinstance(self.expected_output_type, type) and issubclass(
             self.expected_output_type, BaseModel
         ):
-            logger.trace(f"Executing struct prompt")
+            logger.trace("Executing struct prompt")
             return cast(
                 T,
                 await struct_llm_call(
@@ -417,7 +417,7 @@ def generate_all_prompt_structures(
             yield SimpleMetaPromptSpec(
                 input_user_task_goal="",  # Dummy values, will be overwritten
                 input_variable_keys=[],
-                input_expected_output_type=str,
+                input_expected_output_type="str",
                 model=selected_model,
                 instructions_and_context="",
             )
@@ -433,7 +433,7 @@ def generate_all_prompt_structures(
                         yield AdvancedMetaPromptSpec(
                             input_user_task_goal="",  # Dummy values, will be overwritten
                             input_variable_keys=[],
-                            input_expected_output_type=str,
+                            input_expected_output_type="str",
                             model=selected_model,
                             role="",
                             instructions="",
