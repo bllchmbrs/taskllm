@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import json
+import random
 from abc import ABC, abstractmethod
 from typing import (
     Any,
@@ -28,6 +29,23 @@ OUTPUT_TYPE = TypeVar("OUTPUT_TYPE", bound=BaseModel | bool | str | None)
 
 cache = get_cache("evaluation")
 DEFAULT_SEMAPHORE = asyncio.Semaphore(10)
+
+
+class FailureTracker:
+    """Tracks failures of specific rows across different prompts"""
+
+    def __init__(self):
+        self.failure_counts: Dict[int, int] = {}
+        self.failure_details: Dict[int, List[Tuple[MetaPrompt, Any]]] = {}
+
+    def record_failure(self, row_id: int, prompt: MetaPrompt, output: Any) -> None:
+        """Record a failure for a specific row"""
+        if row_id not in self.failure_counts:
+            self.failure_counts[row_id] = 0
+            self.failure_details[row_id] = []
+
+        self.failure_counts[row_id] += 1
+        self.failure_details[row_id].append((prompt, output))
 
 
 class PromptWithType(BaseModel, Generic[OUTPUT_TYPE]):
@@ -236,6 +254,8 @@ class Trainer(Generic[OUTPUT_TYPE], ABC):
         candidates_per_iteration: int = 3,
         print_iteration_summary: bool = True,
         models: Optional[List[str]] = None,
+        failure_analysis_enabled: bool = False,
+        failure_threshold: int = 2,
     ):
         if isinstance(all_rows, List):
             self.dataset = DataSet(rows=all_rows, name="dataset")
@@ -252,6 +272,9 @@ class Trainer(Generic[OUTPUT_TYPE], ABC):
         self.print_iteration_summary = print_iteration_summary
         self.training_start_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         self.log_file = f"prompt_history_{self.training_start_time}.jsonl"
+        self.failure_analysis_enabled = failure_analysis_enabled
+        self.failure_threshold = failure_threshold
+        self.failure_tracker = FailureTracker()
         # Create empty file
         with open(self.log_file, "w") as f:
             pass
@@ -305,8 +328,31 @@ class Trainer(Generic[OUTPUT_TYPE], ABC):
         prompt_with_type: PromptWithType[OUTPUT_TYPE] = PromptWithType(
             meta_prompt=prompt
         )
-        _ = await prompt_with_type.get_outputs(rows)
+        outputs = await prompt_with_type.get_outputs(rows)
+
+        # Record failures if enabled
+        if self.failure_analysis_enabled:
+            logger.info("Recording failures")
+            for i, (row, output) in enumerate(zip(rows, outputs)):
+                score = self.scoring_function(row, output)
+                if score <= 0:
+                    self.failure_tracker.record_failure(id(row), prompt, output)
+
         return prompt_with_type
+
+    async def get_consistent_failures(self) -> List[Dict[str, Any]]:
+        """Get rows that consistently fail across multiple prompts"""
+        failures = []
+        for row_id, count in self.failure_tracker.failure_counts.items():
+            if count >= self.failure_threshold:
+                row = next((r for r in self.dataset.rows if id(r) == row_id), None)
+                if row:
+                    failures.append({"row": row, "failure_count": count})
+        random.shuffle(failures)
+        logger.info(
+            f"Found {len(failures)} failures and {len(failures[: self.failure_threshold])} will be used"
+        )
+        return failures[: self.failure_threshold]
 
     def dump(self) -> None:
         """Save the best prompt to disk"""

@@ -1,24 +1,23 @@
 import asyncio
-
-# Add this import for serialization
+import math
 import random
 import re
-from typing import Callable, Dict, List, Literal, Optional, Tuple, Type, cast
+from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple, Type, cast
 
-# Replace arviz with torch and pyro
 import numpy as np
 import pyro
 import pyro.contrib.gp as gp
 import pyro.optim
 import torch
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pyro.infer import SVI, Trace_ELBO
 from scipy import stats  # type: ignore
 
 from ..data import DataSet, Row
 from ..prompt.meta import (
     DEFAULT_LLM_CONFIG,
+    LLMConfig,
     MetaPrompt,
     MetaPromptSpecBase,
     ModelsEnum,
@@ -27,7 +26,7 @@ from ..prompt.meta import (
 )
 
 # Base optimizer components
-from .base import OUTPUT_TYPE, BaseOptimizer, PromptWithType, Trainer
+from .base import OUTPUT_TYPE, BaseOptimizer, FailureTracker, PromptWithType, Trainer
 
 
 def calculate_model_complexity(model: str) -> float:
@@ -691,6 +690,9 @@ class BayesianTrainer(Trainer[OUTPUT_TYPE]):
         exploration_weight: float = 0.1,
         prompt_mode: PromptMode = PromptMode.ADVANCED,
         models: Optional[List[str]] = None,
+        failure_analysis_enabled: bool = False,
+        failure_threshold: int = 2,
+        print_iteration_summary: bool = True,
     ):
         """Initialize the BayesianTrainer with appropriate configuration."""
         # Create the optimizer directly since we don't need to create the dataset first
@@ -715,6 +717,9 @@ class BayesianTrainer(Trainer[OUTPUT_TYPE]):
             num_iterations=num_iterations,
             candidates_per_iteration=candidates_per_iteration,
             models=models,
+            failure_analysis_enabled=failure_analysis_enabled,
+            failure_threshold=failure_threshold,
+            print_iteration_summary=print_iteration_summary,
         )
         self.bayesian_optimizer = cast(BayesianOptimizer, self.optimizer)
         self.models_to_test = models
@@ -788,10 +793,41 @@ class BayesianTrainer(Trainer[OUTPUT_TYPE]):
                     current_best_score = best_score
                     logger.info(f"Current best score: {current_best_score:.4f}")
 
-            # Generate next candidates using Bayesian optimization
-            candidates: List[MetaPrompt] = await self.optimizer.select_next_prompts(
-                self.candidates_per_iteration, self.dataset.training_rows
-            )
+            # Generate next candidates using Bayesian optimization or failure analysis
+            if self.failure_analysis_enabled:
+                logger.info("Performing failure analysis")
+                consistent_failures = await self.get_consistent_failures()
+                if consistent_failures:
+                    logger.info(
+                        f"Found {len(consistent_failures)} consistently failing examples"
+                    )
+                    # Use failures in next iteration's prompt generation
+                    candidates = await generate_prompts(
+                        self.task_guidance,
+                        self.keys,
+                        self.expected_output_type,  # type: ignore
+                        self.candidates_per_iteration,
+                        mode=self.bayesian_optimizer.prompt_mode,
+                        failures=consistent_failures,  # Pass failures here
+                    )
+                    # Apply model selection if needed
+                    if self.models_to_test:
+                        for candidate in candidates:
+                            candidate.config = candidate.config.model_copy(
+                                update={
+                                    "model": random.choice(list(self.models_to_test))
+                                }
+                            )
+                else:
+                    # Regular candidate generation using Bayesian optimization
+                    candidates = await self.optimizer.select_next_prompts(
+                        self.candidates_per_iteration, self.dataset.training_rows
+                    )
+            else:
+                # Regular candidate generation without failure analysis
+                candidates = await self.optimizer.select_next_prompts(
+                    self.candidates_per_iteration, self.dataset.training_rows
+                )
 
             if not candidates:
                 logger.warning(

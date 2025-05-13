@@ -5,10 +5,16 @@ from typing import Callable, List, Optional, Type
 from loguru import logger
 
 from ..data import DataSet, Row
-from ..prompt.meta import LLMConfig, MetaPrompt, MetaPromptSpecBase, PromptMode, generate_prompts
+from ..prompt.meta import (
+    LLMConfig,
+    MetaPrompt,
+    MetaPromptSpecBase,
+    PromptMode,
+    generate_prompts,
+)
 
 # Ensure PromptWithType is imported if needed for type hints, though not directly used in methods here
-from .base import OUTPUT_TYPE, BaseOptimizer, PromptWithType, Trainer
+from .base import OUTPUT_TYPE, BaseOptimizer, FailureTracker, PromptWithType, Trainer
 
 
 class BanditOptimizer(BaseOptimizer[OUTPUT_TYPE]):
@@ -123,9 +129,9 @@ class BanditOptimizer(BaseOptimizer[OUTPUT_TYPE]):
             )
 
         # Execute all variation creation tasks concurrently
-        created_variation_specs: List[
-            MetaPromptSpecBase | None
-        ] = await asyncio.gather(*variation_tasks)
+        created_variation_specs: List[MetaPromptSpecBase | None] = await asyncio.gather(
+            *variation_tasks
+        )
 
         # Filter out None results (failed variations) and convert specs to MetaPrompt objects
         for spec in created_variation_specs:
@@ -137,7 +143,7 @@ class BanditOptimizer(BaseOptimizer[OUTPUT_TYPE]):
                     max_tokens=1000,
                     top_p=1.0,
                     frequency_penalty=0.0,
-                    presence_penalty=0.0
+                    presence_penalty=0.0,
                 )
                 variations.append(
                     MetaPrompt(
@@ -203,6 +209,8 @@ class BanditTrainer(Trainer[OUTPUT_TYPE]):
         exploration_parameter: float = 0.1,  # Pass exploration param to optimizer
         prompt_mode: PromptMode = PromptMode.SIMPLE,  # Default to advanced mode
         models: Optional[List[str]] = None,  # Add models parameter
+        failure_analysis_enabled: bool = False,
+        failure_threshold: int = 2,
     ):
         """Initialize the bandit trainer."""
         optimizer = BanditOptimizer(
@@ -223,6 +231,8 @@ class BanditTrainer(Trainer[OUTPUT_TYPE]):
             num_iterations=num_iterations,
             candidates_per_iteration=candidates_per_iteration,
             models=models,  # Pass models parameter to super constructor
+            failure_analysis_enabled=failure_analysis_enabled,
+            failure_threshold=failure_threshold,
         )
         # No self.best_prompt needed, managed by optimizer state + select_best_prompt
         logger.debug("BanditTrainer initialized", optimizer_type="BanditOptimizer")
@@ -305,9 +315,32 @@ class BanditTrainer(Trainer[OUTPUT_TYPE]):
             logger.info(f"Iteration {iteration + 2}/{self.num_iterations}")
 
             # Generate next candidates (will use optimizer's internal best or explore)
-            candidates: List[MetaPrompt] = await self.generate_candidate_prompts(
-                self.candidates_per_iteration
-            )
+            if self.failure_analysis_enabled:
+                consistent_failures = await self.get_consistent_failures()
+                if consistent_failures:
+                    logger.info(
+                        f"Found {len(consistent_failures)} consistently failing examples"
+                    )
+                    # Use failures in next iteration's prompt generation
+                    candidates = await generate_prompts(
+                        self.task_guidance,
+                        self.keys,
+                        self.expected_output_type,  # type: ignore[arg-type]
+                        self.candidates_per_iteration,
+                        mode=prompt_mode,
+                        failures=consistent_failures,  # Pass failures here
+                    )
+                else:
+                    # Regular candidate generation
+                    candidates = await self.generate_candidate_prompts(
+                        self.candidates_per_iteration
+                    )
+            else:
+                # Regular candidate generation without failure analysis
+                candidates = await self.generate_candidate_prompts(
+                    self.candidates_per_iteration
+                )
+
             if not candidates:
                 logger.warning(
                     f"Iteration {iteration + 2}: No new candidates generated. Skipping evaluation."

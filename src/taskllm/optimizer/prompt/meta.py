@@ -451,7 +451,26 @@ async def generate_prompts(
     expected_output_type: Type[BaseModel] | bool | str,
     num_prompts: int,
     mode: PromptMode = PromptMode.ADVANCED,
+    failures: Optional[List[Dict[str, Any]]] = None,
 ) -> List[MetaPrompt[MetaPromptSpecBase]]:
+    # If failures provided, modify guidance to include failure examples
+    if failures and len(failures) > 0:
+        # Format top 3 failures as examples
+        failure_examples = "\n".join(
+            [
+                f"Example that needs special attention:\n"
+                f"Input: {f['row'].input_variables}\n"
+                f"Expected output: {f['row'].expected_output}\n"
+                f"This example fails {f['failure_count']} times."
+                for f in failures
+            ]
+        )
+
+        # Add to guidance
+        enhanced_guidance = f"{guidance}\n\nThe prompt should specifically handle these challenging cases:\n{failure_examples}"
+    else:
+        enhanced_guidance = guidance
+
     # Choose the appropriate spec generator based on mode
     spec_generator: Callable[
         [str, List[str], Type[BaseModel] | bool | str],
@@ -466,7 +485,7 @@ async def generate_prompts(
     specs = await asyncio.gather(
         *[
             spec_generator(
-                guidance + "\n\n" + generate_random_modifier(),
+                enhanced_guidance + "\n\n" + generate_random_modifier(),
                 keys,
                 expected_output_type,
             )
