@@ -93,6 +93,12 @@ class MetaPromptSpecBase(BaseModel):
     def __hash__(self) -> int:
         return int(hashlib.sha256(self.model_dump_json().encode()).hexdigest(), 16)
 
+    async def vary_model(
+        self, candidate_models: List[ModelsEnum]
+    ) -> Optional["MetaPromptSpecBase"]:
+        new_model = random.choice(candidate_models)
+        return self.model_copy(update={"model": new_model})
+
     @abstractmethod
     async def variation_types(self) -> Set[str]:
         pass
@@ -149,16 +155,11 @@ class SimpleMetaPromptSpec(MetaPromptSpecBase):
             model=model,
         )
 
-    async def vary(
-        self, variation_type: Set[Literal["instructions_and_context"]]
-    ) -> Optional["SimpleMetaPromptSpec"]:
+    async def vary(self) -> Optional["SimpleMetaPromptSpec"]:
         varied_instructions_and_context = await vary_content(
             self.instructions_and_context, generate_random_modifier()
         )
-        varied_model = random.choice(list(ModelsEnum))
-        coin_flip = random.random()
-        if coin_flip < 0.5:
-            varied_model = self.model
+
         if varied_instructions_and_context is None:
             return None
         return SimpleMetaPromptSpec(
@@ -166,7 +167,7 @@ class SimpleMetaPromptSpec(MetaPromptSpecBase):
             input_variable_keys=self.input_variable_keys,
             input_expected_output_type=self.input_expected_output_type,
             instructions_and_context=varied_instructions_and_context,
-            model=varied_model,
+            model=self.model,
         )
 
     def get_content(self) -> str:
