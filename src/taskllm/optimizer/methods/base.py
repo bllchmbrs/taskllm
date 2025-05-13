@@ -1,4 +1,6 @@
 import asyncio
+import datetime
+import json
 from abc import ABC, abstractmethod
 from typing import (
     Any,
@@ -248,6 +250,11 @@ class Trainer(Generic[OUTPUT_TYPE], ABC):
         self.candidates_per_iteration = candidates_per_iteration
         self.optimizer = optimizer
         self.print_iteration_summary = print_iteration_summary
+        self.training_start_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.log_file = f"prompt_history_{self.training_start_time}.jsonl"
+        # Create empty file
+        with open(self.log_file, "w") as f:
+            pass
 
         # If models specified, pass to optimizer
         if models:
@@ -264,6 +271,21 @@ class Trainer(Generic[OUTPUT_TYPE], ABC):
     async def log_performance(self, performance: PromptWithType) -> None:
         """Log performance data for a prompt template"""
         await self.optimizer.log_prompt_to_history(performance)
+
+        # Log prompt and score
+        score = await performance.calculate_scores(
+            self.dataset.training_rows, self.scoring_function
+        )
+
+        entry = {
+            "timestamp": datetime.datetime.now().isoformat(),
+            "prompt_content": performance.meta_prompt.get_user_message_content(),
+            "score": float(score),
+            "model": performance.meta_prompt.config.model,
+        }
+
+        with open(self.log_file, "a") as f:
+            f.write(json.dumps(entry) + "\n")
 
     async def generate_candidate_prompts(
         self, num_variations: int = 3

@@ -2,6 +2,7 @@ import asyncio
 
 # Add this import for serialization
 import random
+import re
 from typing import Callable, Dict, List, Literal, Optional, Tuple, Type, cast
 
 # Replace arviz with torch and pyro
@@ -20,12 +21,61 @@ from ..prompt.meta import (
     DEFAULT_LLM_CONFIG,
     MetaPrompt,
     MetaPromptSpecBase,
+    ModelsEnum,
     PromptMode,
     generate_prompts,
 )
 
 # Base optimizer components
 from .base import OUTPUT_TYPE, BaseOptimizer, PromptWithType, Trainer
+
+
+def calculate_model_complexity(model: str) -> float:
+    """Calculate the complexity of a model.
+
+    Args:
+        model: The model to calculate the complexity of
+
+    """
+    _model = model.lower()
+    if "nano" in _model:
+        return 0.1
+    elif "mini" in _model:
+        return 0.3
+    elif "haiku" in _model:
+        return 0.3
+    elif "sonnet" in _model:
+        return 0.7
+    elif "large" in _model:
+        return 0.9
+
+    match = re.search(r"(\d+)b", _model)
+    if match:
+        num = int(match.group(1)) / 100.0
+        return num
+
+    return 0.5
+
+
+def calculate_model_provider(model: str, candidate_providers: List[str]) -> List[float]:
+    """Calculate the provider of a model using one-hot encoding.
+
+    Args:
+        model: The model to calculate the provider of.
+        candidate_providers: A list of possible providers.
+
+    Returns:
+        A one-hot encoded list representing the model's provider.
+    """
+    providers = [c.split("/")[0] for c in candidate_providers]
+    unique_providers = list(set(providers))
+    model_provider = model.split("/")[0]
+
+    encoding = [0.0] * len(unique_providers)
+    if model_provider in unique_providers:
+        index = unique_providers.index(model_provider)
+        encoding[index] = 1.0
+    return encoding
 
 
 class BayesianParams(BaseModel):
@@ -74,24 +124,12 @@ def _extract_single_prompt_features(prompt: MetaPrompt) -> np.ndarray:
     question_count = content.count("?")
     features.append(min(question_count / 5, 1.0))
 
-    # Feature 5: Presence of examples (code blocks, etc.)
-    example_indicators = ["example", "for instance", "e.g.", "```", "example:"]
-    example_count = sum(
-        1 for indicator in example_indicators if indicator.lower() in content.lower()
-    )
-    features.append(min(example_count / len(example_indicators), 1.0))
+    # Feature 5: Model complexity
+    model_complexity = calculate_model_complexity(prompt.config.model)
+    features.append(model_complexity)
 
-    # Feature 6: Model complexity - based on the model being used
-    model_complexity_map = {
-        "openai/gpt-4o-mini": 0.5,
-        "openai/gpt-4.1-nano-2025-04-14": 0.3,
-        "openai/gpt-4.1-mini-2025-04-14": 0.6,
-        "anthropic/claude-3-haiku-20240307": 0.4,
-        "groq/gemma2-9b-it": 0.3,
-        "groq/llama3-8b-8192": 0.2,
-    }
-    model_name = prompt.config.model
-    features.append(model_complexity_map.get(model_name, 0.5))
+    model_provider = calculate_model_provider(prompt.config.model, list(ModelsEnum))
+    features.extend(model_provider)
 
     # Convert to numpy array
     feature_array = np.array(features)
