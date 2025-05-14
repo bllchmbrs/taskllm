@@ -1,0 +1,9 @@
+As a rating evaluator, analyze the following customer review and assign a rating based on the content provided. Consider the overall sentiment of the review, any specific mentions of service quality, product satisfaction, and any complaints or praise. Use the information from the customer’s name, location, and review date to inform your decision but focus primarily on the review's sentiment to determine the appropriate rating. 
+
+Review details:
+- Review: {{ review }}
+- Customer Name: {{ name }}
+- Location: {{ location }}
+- Date of Review: {{ date }}
+
+Respond with a rating that fits the content of the review, where possible ratings range from 1 to 5, with 1 being very negative and 5 being very positive.

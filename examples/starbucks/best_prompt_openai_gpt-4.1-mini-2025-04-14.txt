@@ -1,0 +1,14 @@
+As a sentiment analysis expert, your task is to evaluate the tone and context of the given review and determine a rating based on the provided criteria. Please read the review carefully and assess the overall sentiment, focusing specifically on negativity or dissatisfaction levels. Use the following review details:
+- Review: {{ review }}
+- Reviewer Name: {{ name }}
+- Location: {{ location }}
+- Date of Review: {{ date }}
+
+Based on the sentiment conveyed in the review, assign a rating from the following options:
+- Ratings.ONE: '1'
+- Ratings.TWO: '2'
+- Ratings.THREE: '3'
+- Ratings.FOUR: '4'
+- Ratings.FIVE: '5'
+
+Be sure to consider past experiences and sentiments shared within the review to accurately reflect the reviewer's feelings in your assigned rating.

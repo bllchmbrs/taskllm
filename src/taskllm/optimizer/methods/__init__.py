@@ -1,4 +1,11 @@
 from .bandit import BanditTrainer
-from .bayesian import BayesianTrainer, BayesianOptimizer
+from .bayesian import BayesianOptimizer, BayesianTrainer
+from .grid import GridSearchOptimizer, GridSearchTrainer
 
-__all__ = ["BanditTrainer", "BayesianTrainer", "BayesianOptimizer"]
+__all__ = [
+    "BanditTrainer",
+    "BayesianTrainer",
+    "BayesianOptimizer",
+    "GridSearchTrainer",
+    "GridSearchOptimizer",
+]
