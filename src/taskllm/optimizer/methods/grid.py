@@ -1,14 +1,13 @@
 import asyncio
 import itertools
-from typing import Any, Callable, Dict, List, Optional, Type, TypeVar
+from typing import Any, Callable, Dict, List, Optional, Type
 
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from ...ai import LLMConfig
 from ..data import DataSet, Row
 from ..prompt.meta import MetaPrompt, PromptMode, generate_prompts
-from .base import OUTPUT_TYPE, BaseOptimizer, PromptWithType, Trainer
+from .base import OUTPUT_TYPE, BaseOptimizer, Trainer
 
 
 class GridSearchParams(BaseModel):
@@ -139,6 +138,15 @@ class GridSearchTrainer(Trainer[OUTPUT_TYPE]):
         failure_analysis_enabled: bool = False,
         failure_threshold: int = 2,
     ):
+        optimizer = GridSearchOptimizer(
+            task_guidance=task_guidance,
+            variable_keys=keys,
+            expected_output_type=expected_output_type,
+            row_scoring_function=scoring_function,
+            grid_dimensions=grid_dimensions,
+            prompt_mode=prompt_mode,
+        )
+        self.optimizer = optimizer
         super().__init__(
             all_rows=all_rows,
             task_guidance=task_guidance,
@@ -151,16 +159,7 @@ class GridSearchTrainer(Trainer[OUTPUT_TYPE]):
             models=models,
             failure_analysis_enabled=failure_analysis_enabled,
             failure_threshold=failure_threshold,
-        )
-
-        # Create the grid search optimizer with our parameters
-        self.optimizer = GridSearchOptimizer(
-            task_guidance=task_guidance,
-            variable_keys=keys,
-            expected_output_type=expected_output_type,
-            row_scoring_function=scoring_function,
-            grid_dimensions=grid_dimensions,
-            prompt_mode=prompt_mode,
+            optimizer=optimizer,
         )
 
         # If models are provided, update the grid dimensions to include them
