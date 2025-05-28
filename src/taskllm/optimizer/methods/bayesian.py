@@ -1,8 +1,7 @@
 import asyncio
-import math
 import random
 import re
-from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple, Type, cast
+from typing import Callable, Dict, List, Literal, Optional, Tuple, Type, cast
 
 import numpy as np
 import pyro
@@ -10,14 +9,13 @@ import pyro.contrib.gp as gp
 import pyro.optim
 import torch
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from pyro.infer import SVI, Trace_ELBO
 from scipy import stats  # type: ignore
 
 from ..data import DataSet, Row
 from ..prompt.meta import (
     DEFAULT_LLM_CONFIG,
-    LLMConfig,
     MetaPrompt,
     MetaPromptSpecBase,
     ModelsEnum,
@@ -26,7 +24,7 @@ from ..prompt.meta import (
 )
 
 # Base optimizer components
-from .base import OUTPUT_TYPE, BaseOptimizer, FailureTracker, PromptWithType, Trainer
+from .base import OUTPUT_TYPE, BaseOptimizer, PromptWithType, Trainer
 
 
 def calculate_model_complexity(model: str) -> float:

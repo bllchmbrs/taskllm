@@ -2,7 +2,6 @@
 Simplified test fixtures.
 """
 import pytest
-from unittest.mock import MagicMock
 
 from taskllm.ai import LLMConfig
 from taskllm.optimizer.data import DataSet

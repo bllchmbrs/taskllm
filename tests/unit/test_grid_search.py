@@ -1,16 +1,12 @@
-import asyncio
 from typing import List, Type
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 from pydantic import BaseModel
 
 from taskllm.ai import LLMConfig
-from taskllm.optimizer.data import Row
 from taskllm.optimizer.methods.grid import GridSearchOptimizer, GridSearchParams
 from taskllm.optimizer.prompt.meta import (
-    AdvancedMetaPromptSpec,
-    InstructionsLocationEnum,
     MetaPrompt,
     ModelsEnum,
     PromptMode,

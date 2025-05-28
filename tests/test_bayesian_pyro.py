@@ -3,14 +3,15 @@ import asyncio
 import pyro
 import pytest
 import torch
+from pydantic import BaseModel
 
 from taskllm.optimizer.methods.bayesian import BayesianOptimizer, BayesianParams
 
 
-class DummyOutputType:
+class DummyOutputType(BaseModel):
     """Dummy output type for testing purposes."""
 
-    pass
+    result: str = "test"
 
 
 def test_init_bayesian_optimizer():
@@ -18,7 +19,9 @@ def test_init_bayesian_optimizer():
     # Setup test parameters
     task_guidance = "Test task guidance"
     variable_keys = ["key1", "key2"]
-    row_scoring_function = lambda row, output: 0.5  # Simple dummy function
+    
+    def row_scoring_function(row, output):
+        return 0.5  # Simple dummy function
 
     # Create optimizer
     optimizer = BayesianOptimizer(
@@ -42,10 +45,12 @@ async def test_feature_extraction():
     # Setup test parameters
     task_guidance = "Test task guidance"
     variable_keys = ["key1", "key2"]
-    row_scoring_function = lambda row, output: 0.5  # Simple dummy function
+    
+    def row_scoring_function(row, output):
+        return 0.5  # Simple dummy function
 
-    # Create optimizer
-    optimizer = BayesianOptimizer(
+    # Create optimizer (not used in this test)
+    BayesianOptimizer(
         task_guidance=task_guidance,
         variable_keys=variable_keys,
         expected_output_type=DummyOutputType,
@@ -70,17 +75,25 @@ async def test_feature_extraction():
         def __init__(self):
             self.spec = DummySpec()
             self.generate_messages = "test"
-            self.config = None
+            # Import LLMConfig to create a proper config
+            from taskllm.optimizer.prompt.meta import DEFAULT_LLM_CONFIG
+            self.config = DEFAULT_LLM_CONFIG
 
         def get_user_message_content(self):
             return "This is a test prompt with some instructions. You should do this. Consider that."
 
     # Extract features
     prompt = DummyMetaPrompt()
-    features = optimizer._extract_single_prompt_features(prompt)
+    # Import the function since it's module-level, not a method
+    from taskllm.optimizer.methods.bayesian import _extract_single_prompt_features
+    features = _extract_single_prompt_features(prompt)
 
     # Verify feature extraction
-    assert features.shape == (optimizer.params.feature_dimension,)
+    # The feature vector should have at least 5 base features + provider features
+    # Base features: length, instruction_count, keyword_count, question_count, model_complexity
+    # Plus one-hot encoded providers (anthropic, openai, groq = 3 providers)
+    expected_dim = 5 + 3  # 5 base features + 3 provider features
+    assert features.shape == (expected_dim,)
     assert 0 <= features[0] <= 1  # Prompt length feature
     assert 0 <= features[2] <= 1  # Keyword presence feature
 

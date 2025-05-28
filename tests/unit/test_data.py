@@ -1,8 +1,6 @@
 import json
 import os
 import tempfile
-from typing import Dict, Any, cast
-from unittest.mock import patch
 
 import pytest
 from pydantic import BaseModel
@@ -238,7 +236,7 @@ def test_dataset_num_labelled_rows(sample_dataset):
 
     # Add an unlabeled row
     sample_dataset.rows.append(
-        Row[SampleResponse](
+        Row[TestOutput](
             input_variables={"prompt": "Unlabeled prompt"},
             expected_output=None,
             is_labeled=False,

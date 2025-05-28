@@ -3,9 +3,7 @@ Provides a PromptSpec implementation for tests.
 """
 from typing import Any, List, Optional, Set
 from enum import Enum
-from typing import Type
 
-from pydantic import BaseModel
 
 from taskllm.optimizer.prompt.meta import MetaPromptSpecBase, PromptMode
 

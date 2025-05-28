@@ -1,11 +1,11 @@
 import hashlib
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from pydantic import BaseModel
 
-from taskllm.ai import LLMConfig, simple_llm_call, struct_llm_call, MaxRetriesExceeded
+from taskllm.ai import simple_llm_call, struct_llm_call
 
 
 class TestOutput(BaseModel):

@@ -276,7 +276,7 @@ class Trainer(Generic[OUTPUT_TYPE], ABC):
         self.failure_threshold = failure_threshold
         self.failure_tracker = FailureTracker()
         # Create empty file
-        with open(self.log_file, "w") as f:
+        with open(self.log_file, "w"):
             pass
 
         # If models specified, pass to optimizer

@@ -2,17 +2,11 @@
 Simplified core tests for optimizers that focus only on the important interface behaviors.
 """
 import pytest
-from unittest.mock import patch, AsyncMock
 
-from taskllm.optimizer.data import DataSet
 from taskllm.optimizer.methods.bandit import BanditOptimizer
 from taskllm.optimizer.methods.bayesian import BayesianOptimizer
 
-from tests.simplified.test_models import (
-    SimpleTestOutput,
-    create_minimal_test_dataset,
-    create_simple_prompt_with_type,
-)
+from tests.simplified.test_models import SimpleTestOutput
 
 
 def simple_scoring_function(row, output):
@@ -25,10 +19,6 @@ def simple_scoring_function(row, output):
 @pytest.mark.asyncio
 async def test_basic_optimizer_interface():
     """Test that optimizers implement the required interface correctly."""
-    # Create a minimal dataset
-    dataset = create_minimal_test_dataset(5)
-    test_dataset = DataSet(name="test_dataset", rows=dataset)
-    
     # Test each optimizer with minimal configuration
     optimizers = [
         BanditOptimizer(
