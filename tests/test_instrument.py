@@ -90,7 +90,7 @@ class TestInstrumentTask(unittest.IsolatedAsyncioTestCase):
         # Expect either "True", true, or 1 depending on how it's saved
         quality_value = log_data["quality"]
         self.assertTrue(
-            quality_value == True or
+            quality_value is True or
             quality_value == "True" or
             quality_value == "true" or
             quality_value == 1

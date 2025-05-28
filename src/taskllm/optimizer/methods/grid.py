@@ -10,14 +10,19 @@ from ..prompt.meta import MetaPrompt, PromptMode, generate_prompts
 from .base import OUTPUT_TYPE, BaseOptimizer, Trainer
 
 
+def _default_grid_dimensions() -> Dict[str, List[Any]]:
+    """Default grid dimensions for grid search."""
+    return {
+        "temperature": [0.1, 0.5, 0.9],
+        "model": ["openai/gpt-4o-mini", "anthropic/claude-3-haiku"],
+    }
+
+
 class GridSearchParams(BaseModel):
     """Parameters for grid search optimization."""
 
     grid_dimensions: Dict[str, List[Any]] = Field(
-        default_factory=lambda: {
-            "temperature": [0.1, 0.5, 0.9],
-            "model": ["openai/gpt-4o-mini", "anthropic/claude-3-haiku"],
-        }
+        default_factory=_default_grid_dimensions
     )
     prompt_variations: int = 3  # Number of prompt variations to test
 
@@ -194,7 +199,7 @@ class GridSearchTrainer(Trainer[OUTPUT_TYPE]):
             perf_tasks = []
             for j, prompt in enumerate(candidate_prompts):
                 logger.info(f"Testing candidate {j + 1}/{len(candidate_prompts)}")
-                perf_tasks.append(self.run_for_prompt(prompt, self.train_rows))
+                perf_tasks.append(self.run_for_prompt(prompt, self.dataset.training_rows))
 
             # Run evaluations concurrently
             performances = await asyncio.gather(*perf_tasks)

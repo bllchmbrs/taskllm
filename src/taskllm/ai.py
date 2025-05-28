@@ -5,13 +5,9 @@ from typing import Any, Dict, List, ParamSpec, Type, TypeVar, cast
 import instructor
 from litellm import completion
 from loguru import logger
-from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 from .utils import get_cache
-
-# Initialize OpenAI client
-aclient = AsyncOpenAI()
 
 cache = get_cache("ai_responses")
 

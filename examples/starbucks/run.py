@@ -6,7 +6,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 from taskllm.optimizer.data import DataSet, Row
-from taskllm.optimizer.methods import BanditTrainer, BayesianTrainer
+from taskllm.optimizer.methods import BayesianTrainer
 from taskllm.optimizer.prompt.meta import PromptMode
 
 # logger.remove()  # remove the old handler. Else, the old one will work (and continue printing DEBUG logs) along with the new handler added below'

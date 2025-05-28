@@ -2,7 +2,7 @@
 Simplified test models with proper serialization for testing.
 """
 import json
-from typing import Any, Dict, List, Optional, Set, Type, cast
+from typing import Any, Dict, List, Optional, Set, Type
 
 from pydantic import BaseModel
 

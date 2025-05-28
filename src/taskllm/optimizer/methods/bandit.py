@@ -14,7 +14,7 @@ from ..prompt.meta import (
 )
 
 # Ensure PromptWithType is imported if needed for type hints, though not directly used in methods here
-from .base import OUTPUT_TYPE, BaseOptimizer, FailureTracker, PromptWithType, Trainer
+from .base import OUTPUT_TYPE, BaseOptimizer, PromptWithType, Trainer
 
 
 class BanditOptimizer(BaseOptimizer[OUTPUT_TYPE]):
